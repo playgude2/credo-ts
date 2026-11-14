@@ -1,13 +1,10 @@
-import { canonicalizeEx } from 'json-canonicalize'
-
 import type { AgentContext } from '../../../../agent/context'
 import { Hasher } from '../../../../crypto'
 import { asArray, MultiBaseEncoder, TypedArrayEncoder } from '../../../../utils'
-import { isObject } from '../../../../utils/object'
 import { KeyManagementApi } from '../../../kms'
 import { isXsdDateTimeStamp } from '../../proof-processing/iso8601Datetime'
+import { canonicalizeJcsStrict } from '../../proof-processing/jcs'
 import { publicJwkFromVerificationMethodId, publicKeyIdFromVerificationMethodId } from '../../proof-processing/keyUtils'
-import { omitUndefinedFields } from '../../proof-processing/normalization'
 import { W3cDataIntegrityProcessingError, W3cDataIntegrityProcessingErrorCode } from '../../W3cDataIntegrityError'
 import type {
   W3cDataIntegrityCryptosuiteProof,
@@ -28,16 +25,6 @@ export class EddsaJcs2022Cryptosuite implements W3cDataIntegrityCryptosuite {
   public constructor(agentContext: AgentContext) {
     this.agentContext = agentContext
     this.keyManagementApi = agentContext.dependencyManager.resolve(KeyManagementApi)
-  }
-
-  private canonicalizeJcsStrict(value: unknown) {
-    const normalized = omitUndefinedFields(value)
-    assertJcsInput(normalized)
-    return canonicalizeEx(normalized, {
-      allowCircular: false,
-      filterUndefined: true,
-      undefinedInArrayToNull: false,
-    })
   }
 
   /*
@@ -135,7 +122,7 @@ export class EddsaJcs2022Cryptosuite implements W3cDataIntegrityCryptosuite {
       throw new W3cDataIntegrityProcessingError(W3cDataIntegrityProcessingErrorCode.ProofTransformationError, err)
     } // 1
 
-    const canonicalDocument = this.canonicalizeJcsStrict(unsecuredDocument) // 2
+    const canonicalDocument = canonicalizeJcsStrict(unsecuredDocument) // 2
     return canonicalDocument // 3
   }
 
@@ -169,7 +156,7 @@ export class EddsaJcs2022Cryptosuite implements W3cDataIntegrityCryptosuite {
       throw new W3cDataIntegrityProcessingError(W3cDataIntegrityProcessingErrorCode.ProofGenerationError, err)
     }
 
-    const canonicalProofConfig = this.canonicalizeJcsStrict(proofConfig) // 4
+    const canonicalProofConfig = canonicalizeJcsStrict(proofConfig) // 4
     return canonicalProofConfig // 5
   }
 
@@ -224,39 +211,6 @@ export class EddsaJcs2022Cryptosuite implements W3cDataIntegrityCryptosuite {
     if (options.type !== 'DataIntegrityProof' || options.cryptosuite !== 'eddsa-jcs-2022') {
       const err = `Proof type must be 'DataIntegrityProof' AND cryptosuite must be 'eddsa-jcs-2022'`
       throw new W3cDataIntegrityProcessingError(errorCode, err)
-    }
-  }
-}
-
-function assertJcsInput(value: unknown, path = '$', seen = new WeakSet<object>()) {
-  if (value === undefined || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
-    const err = `JCS canonicalization input contains unsupported value at ${path}`
-    throw new W3cDataIntegrityProcessingError(W3cDataIntegrityProcessingErrorCode.ProofTransformationError, err)
-  }
-
-  if (typeof value === 'number' && !Number.isFinite(value)) {
-    const err = `JCS canonicalization input contains non-finite number at ${path}`
-    throw new W3cDataIntegrityProcessingError(W3cDataIntegrityProcessingErrorCode.ProofTransformationError, err)
-  }
-
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      assertJcsInput(value[i], `${path}[${i}]`, seen)
-    }
-    return
-  }
-
-  if (isObject(value)) {
-    const objectValue = value as object
-    if (seen.has(objectValue)) {
-      const err = `JCS canonicalization input contains circular reference at ${path}`
-      throw new W3cDataIntegrityProcessingError(W3cDataIntegrityProcessingErrorCode.ProofTransformationError, err)
-    }
-
-    seen.add(objectValue)
-
-    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
-      assertJcsInput(nestedValue, `${path}.${key}`, seen)
     }
   }
 }

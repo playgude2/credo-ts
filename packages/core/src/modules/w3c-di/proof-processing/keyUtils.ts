@@ -34,17 +34,20 @@ export async function publicJwkFromVerificationMethodId(
  *
  * @param agentContext - The agent context for DID resolution and key lookup
  * @param verificationMethodId - The verification method identifier (typically a DID fragment)
+ * @param resolvedPublicJwk - The public JWK of the verification method, when the caller already resolved it.
+ * Passing it avoids resolving the DID document again.
  * @returns Promise<string> - The KMS key ID for the verification method
  */
 export async function publicKeyIdFromVerificationMethodId(
   agentContext: AgentContext,
-  verificationMethodId: string
+  verificationMethodId: string,
+  resolvedPublicJwk?: PublicJwk
 ): Promise<string> {
   const didApi = agentContext.dependencyManager.resolve(DidsApi)
   const parsedDid = parseDid(verificationMethodId)
   const [didRecord] = await didApi.getCreatedDids({ did: parsedDid.did })
 
-  const publicJwk = await publicJwkFromVerificationMethodId(agentContext, verificationMethodId)
+  const publicJwk = resolvedPublicJwk ?? (await publicJwkFromVerificationMethodId(agentContext, verificationMethodId))
   return (
     didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === `#${parsedDid.fragment}`)
       ?.kmsKeyId ?? publicJwk.legacyKeyId
